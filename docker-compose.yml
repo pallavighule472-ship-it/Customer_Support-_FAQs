@@ -1,0 +1,29 @@
+services:
+
+  streamlit:
+    build: .
+    command: streamlit run Chatbot_Frontend.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./metadata.json:/app/metadata.json
+      - ./chat_history.json:/app/chat_history.json
+      - ./feedback.json:/app/feedback.json
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uvicorn Chatbot_run:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./metadata.json:/app/metadata.json
+      - ./chat_history.json:/app/chat_history.json
+      - ./feedback.json:/app/feedback.json
+    env_file:
+      - .env
+    restart: unless-stopped
