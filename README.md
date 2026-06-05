@@ -2,6 +2,8 @@
 
 SwiftHelp is an end-to-end customer support chatbot that automatically generates FAQs from any business website and answers customer questions using Retrieval-Augmented Generation (RAG). Built with LangGraph, LangChain, ChromaDB, and OpenAI.
 
+![SwiftHelp Demo](demo_2.gif)
+
 ---
 
 ## Architecture
