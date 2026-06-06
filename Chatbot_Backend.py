@@ -147,15 +147,14 @@ def chunk_text(state: IngestionState) -> dict:
     return {"chunks": chunks}
 
 
-FAQ_PROMPT = """You are a FAQ generator for a business website.
-Given the text below from {entity_name}'s website, generate FAQ pairs.
+FAQ_PROMPT = """You are a FAQ generator. Given the text below from {entity_name}'s website, generate FAQ pairs that a visitor might ask.
 
 Rules:
 - Only generate FAQs directly supported by the text
-- Focus on hours, location, services, pricing, bookings, contact info, dietary options, allergies, accessibility, wifi, parking, delivery
-- Include complete specific details in answers — full addresses, exact times, precise prices
-- Skip if text is about cookies, privacy policy, or legal terms
-- Generate as many FAQs as possible, covering every useful detail in the text
+- Cover any useful topic: what the site/org is about, services, products, pricing, hours, location, contact, policies, how-to, features, eligibility, process, history, facts — whatever is present
+- Include complete specific details in answers
+- Skip text about cookies, privacy policy, or generic legal boilerplate
+- Generate as many FAQs as possible covering every useful detail
 - Return a JSON array only, no markdown, no extra text
 
 Format:
