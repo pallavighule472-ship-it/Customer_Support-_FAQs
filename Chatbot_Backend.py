@@ -253,12 +253,12 @@ def store_in_chroma(state: IngestionState) -> dict:
     try:
         client     = chromadb.PersistentClient(path=CHROMA_PATH)
         collection = client.get_or_create_collection(name="faqs")
+        _url_hash = hashlib.md5(state["url"].encode()).hexdigest()[:12]
         collection.upsert(
             embeddings=state["embeddings"],
             documents =[doc.page_content for doc in state["documents"]],
             metadatas =[doc.metadata     for doc in state["documents"]],
-            _url_hash = hashlib.md5(state["url"].encode()).hexdigest()[:12]
-        ids       =[f"{_url_hash}_{i}" for i in range(len(state["documents"]))]
+            ids       =[f"{_url_hash}_{i}" for i in range(len(state["documents"]))]
         )
         return {"embedded_count": len(state["documents"]), "success": True}
     except Exception as e:
