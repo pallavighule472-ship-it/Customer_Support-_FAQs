@@ -1,3 +1,4 @@
+import html as html_lib
 import streamlit as st
 import uuid
 import json
@@ -154,7 +155,10 @@ if not st.session_state.authenticated:
         password = st.text_input("Password", type="password", label_visibility="collapsed",
                                   placeholder="Enter password")
         if st.button("Login", use_container_width=True):
-            if password == os.getenv("SETUP_PASSWORD", "swifthelp2024"):
+            _required_pw = os.getenv("SETUP_PASSWORD")
+            if not _required_pw:
+                st.error("SETUP_PASSWORD environment variable is not configured.")
+            elif password == _required_pw:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
@@ -162,7 +166,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())[:8]
+    st.session_state.session_id = str(uuid.uuid4())
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "ingestion_result" not in st.session_state:
@@ -241,10 +245,11 @@ with tab1:
 
     if st.session_state.ingestion_result:
         r = st.session_state.ingestion_result
+        _name = html_lib.escape(r.get('entity_name', 'Unknown'))
         st.markdown(f"""
         <div class="success-box">
             ✅ <strong>Knowledge base active</strong><br><br>
-            🏢 <b>Business:</b> {r.get('entity_name', 'Unknown')}<br>
+            🏢 <b>Business:</b> {_name}<br>
             🔗 <b>Pages processed:</b> {r.get('urls_processed', 1)}<br>
             📚 <b>Total FAQs stored:</b> {r.get('embedded_count', 0)}
         </div>
@@ -403,10 +408,12 @@ with tab3:
         st.markdown('<p class="section-title">Knowledge Base</p>', unsafe_allow_html=True)
         for url, info in metadata.items():
             ingested_at = info.get("ingested_at", "")[:10]
+            _ename = html_lib.escape(info.get('entity_name', 'Unknown'))
+            _url   = html_lib.escape(url)
             st.markdown(f"""
             <div class="success-box">
-                🏢 <b>{info.get('entity_name', 'Unknown')}</b><br>
-                🔗 {url}<br>
+                🏢 <b>{_ename}</b><br>
+                🔗 {_url}<br>
                 📚 <b>{info.get('embedded_count', 0)} FAQs</b> &nbsp;|&nbsp; 🕐 Ingested: {ingested_at}
             </div>
             """, unsafe_allow_html=True)

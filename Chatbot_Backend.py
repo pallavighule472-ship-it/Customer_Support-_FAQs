@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import smtplib
@@ -256,7 +257,8 @@ def store_in_chroma(state: IngestionState) -> dict:
             embeddings=state["embeddings"],
             documents =[doc.page_content for doc in state["documents"]],
             metadatas =[doc.metadata     for doc in state["documents"]],
-            ids       =[f"{state['entity_name']}_{i}" for i in range(len(state["documents"]))]
+            _url_hash = hashlib.md5(state["url"].encode()).hexdigest()[:12]
+        ids       =[f"{_url_hash}_{i}" for i in range(len(state["documents"]))]
         )
         return {"embedded_count": len(state["documents"]), "success": True}
     except Exception as e:
@@ -315,6 +317,16 @@ graph_ingestion.add_edge("update_metadata",  END)
 app_ingestion = graph_ingestion.compile()
 
 
+# ─── Shared singletons for the support pipeline ──────────────────────────────
+_llm_intent  = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+_llm_answer  = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+_vectorstore = Chroma(
+    collection_name="faqs",
+    embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
+    persist_directory=CHROMA_PATH,
+)
+
+
 # ─── Graph 2: Customer Support Pipeline ───────────────────────────────────────
 
 class SupportState(TypedDict):
@@ -359,8 +371,7 @@ Assistant:"""
 
 
 def classify_intent(state: SupportState) -> dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    response = llm.invoke([HumanMessage(content=INTENT_PROMPT.format(query=state["user_query"]))])
+    response = _llm_intent.invoke([HumanMessage(content=INTENT_PROMPT.format(query=state["user_query"]))])
     intent = response.content.strip().lower()
     if intent not in ["faq", "escalate", "other"]:
         intent = "faq"
@@ -385,19 +396,12 @@ def retrieve_context(state: SupportState) -> dict:
     if state["intent"] != "faq":
         return {"retrieved_docs": []}
 
-    vectorstore = Chroma(
-        collection_name="faqs",
-        embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
-        persist_directory=CHROMA_PATH
-    )
-    return {"retrieved_docs": vectorstore.similarity_search(state["user_query"], k=5)}
+    return {"retrieved_docs": _vectorstore.similarity_search(state["user_query"], k=5)}
 
 
 def generate_answer(state: SupportState) -> dict:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
-
     if state["intent"] == "other":
-        response = llm.invoke([HumanMessage(content=(
+        response = _llm_answer.invoke([HumanMessage(content=(
             f"The user said: '{state['user_query']}'\n"
             "Reply with a friendly greeting and offer to help with business questions. "
             "Respond in the same language as the user's message."
@@ -407,7 +411,7 @@ def generate_answer(state: SupportState) -> dict:
     context = "\n\n".join([f"[{i}] {doc.page_content}" for i, doc in enumerate(state["retrieved_docs"], 1)])
     history = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in state["chat_history"][-4:]])
 
-    response = llm.invoke([HumanMessage(content=ANSWER_PROMPT.format(
+    response = _llm_answer.invoke([HumanMessage(content=ANSWER_PROMPT.format(
         context=context, history=history, query=state["user_query"]
     ))])
     return {"answer": response.content.strip()}
@@ -473,11 +477,27 @@ def _send_ticket_email(ticket_id: str, user_query: str, session_id: str):
 def escalation_node(state: SupportState) -> dict:
     ticket_id = str(uuid.uuid4())[:8].upper()
     _send_ticket_email(ticket_id, state["user_query"], state["session_id"])
+    final_response = "A support ticket has been created. Our team will get back to you shortly."
+
+    try:
+        with open(CHAT_HISTORY_PATH, "r") as f:
+            all_history = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        all_history = {}
+
+    sid = state["session_id"]
+    all_history.setdefault(sid, [])
+    all_history[sid].append({"role": "user",      "content": state["user_query"]})
+    all_history[sid].append({"role": "assistant", "content": final_response})
+
+    with open(CHAT_HISTORY_PATH, "w") as f:
+        json.dump(all_history, f, indent=2)
+
     return {
         "escalate":        True,
         "ticket_id":       ticket_id,
         "escalate_reason": "User requested human support or action",
-        "final_response":  "A support ticket has been created. Our team will get back to you shortly.",
+        "final_response":  final_response,
     }
 
 
